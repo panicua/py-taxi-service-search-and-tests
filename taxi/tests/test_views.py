@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase, Client
+from django.test import TestCase
 from django.urls import reverse
 
 from taxi.models import Manufacturer, Car
@@ -12,7 +12,7 @@ DRIVER_URL = reverse("taxi:driver-list")
 class PublicManufacturerTest(TestCase):
     def test_manufacturer_login_required(self):
         response = self.client.get(MANUFACTURER_URL)
-        self.assertNotEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
 
 
 class PrivateManufacturerTest(TestCase):
@@ -22,11 +22,17 @@ class PrivateManufacturerTest(TestCase):
             password="test123",
         )
         self.client.force_login(self.user)
-
-    def test_retrieve_manufacturers(self):
         Manufacturer.objects.create(name="BMW", country="Germany")
         Manufacturer.objects.create(name="Ford", country="USA")
         Manufacturer.objects.create(name="Mini", country="UK")
+
+    def test_search_manufacturer_by_name(self):
+        response = self.client.get(MANUFACTURER_URL, {"name": "M"})
+        self.assertContains(response, "BMW")
+        self.assertContains(response, "Mini")
+        self.assertNotContains(response, "Ford")
+
+    def test_retrieve_manufacturers(self):
         response = self.client.get(MANUFACTURER_URL)
         self.assertEqual(response.status_code, 200)
         manufacturers = Manufacturer.objects.all()
@@ -40,7 +46,7 @@ class PrivateManufacturerTest(TestCase):
 class PublicCarTest(TestCase):
     def test_car_login_required(self):
         response = self.client.get(CAR_URL)
-        self.assertNotEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
 
 
 class PrivateCarTest(TestCase):
@@ -51,12 +57,18 @@ class PrivateCarTest(TestCase):
         )
         self.client.force_login(self.user)
 
-    def test_retrieve_cars(self):
         manufacturer = Manufacturer.objects.create(
             name="Porsche", country="Germany"
         )
         Car.objects.create(model="GT3", manufacturer=manufacturer)
         Car.objects.create(model="Taycan", manufacturer=manufacturer)
+
+    def test_search_car_by_model(self):
+        response = self.client.get(CAR_URL, {"model": "GT"})
+        self.assertContains(response, "GT3")
+        self.assertNotContains(response, "Taycan")
+
+    def test_retrieve_cars(self):
         response = self.client.get(CAR_URL)
         self.assertEqual(response.status_code, 200)
         cars = Car.objects.all()
@@ -70,7 +82,7 @@ class PrivateCarTest(TestCase):
 class PublicDriverTest(TestCase):
     def test_driver_login_required(self):
         response = self.client.get(DRIVER_URL)
-        self.assertNotEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
 
 
 class PrivateDriverTest(TestCase):
@@ -80,14 +92,26 @@ class PrivateDriverTest(TestCase):
             password="test1231",
         )
         self.client.force_login(self.user)
+        get_user_model().objects.create(
+            username="driver1", first_name="John",
+            last_name="Doe", license_number="ABC22345"
+        )
+        get_user_model().objects.create(
+            username="driver2", first_name="John",
+            last_name="Doe", license_number="ABC32345"
+        )
+        get_user_model().objects.create(
+            username="racer1", first_name="John",
+            last_name="Doe", license_number="ABC42345"
+        )
+
+    def test_search_driver_by_username(self):
+        response = self.client.get(DRIVER_URL, {"username": "drive"})
+        self.assertContains(response, "driver1")
+        self.assertContains(response, "driver2")
+        self.assertNotContains(response, "racer1")
 
     def test_retrieve_drivers(self):
-        get_user_model().objects.create_user(
-            username="test", password="test1", license_number="ABC12345"
-        )
-        get_user_model().objects.create_user(
-            username="test_admin", password="test2", license_number="ABC12340"
-        )
         response = self.client.get(DRIVER_URL)
         self.assertEqual(response.status_code, 200)
         drivers = get_user_model().objects.all()
